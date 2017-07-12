@@ -40,7 +40,9 @@ po::variables_map parse(int argc, char **argv) {
 	("frame.step", po::value<int>()->default_value(1), "step between frames of interest")
 	("frame.count", po::value<int>(), "number of frames of interest")
 	("grid.width", po::value<int>()->default_value(128), "number of horizontal grid points")
-	("grid.height", po::value<int>()->default_value(64), "number of vertical grid points");
+	("grid.height", po::value<int>()->default_value(64), "number of vertical grid points")
+	("poly.n", po::value<int>()->default_value(7), "order of polynomial for neighborhood estimation")
+	("window.size", po::value<int>()->default_value(45), "window size for averaging");
 	op.add(fop);
 
 	// Parse command line
@@ -134,7 +136,7 @@ H5::H5File file;
 void siginthandler(int param)
 {
 	std::cerr << std::endl;
-	if (file.getId()) {
+	if (file.getId() > 0) {
 		file.flush(H5F_SCOPE_GLOBAL);
 	}
 	std::exit(-1);
@@ -207,11 +209,11 @@ int main(int argc, char* argv[]) {
 	if (bg.empty()) {
 		bg = cv::Mat(h, w, CV_32FC1, cv::Scalar::all(0));
 		std::cout << "Computing background image:" << std::endl;
-		std::cout << "    0%" << std::flush;
+		std::cout << "    0% (1/" << c << ")" << std::flush;
 		for (int i = 0; cap.read(im); ++i) {
 			cv::cvtColor(im, gm, CV_RGB2GRAY); // convert to grayscale
 			cv::accumulate(gm, bg);
-			std::cout << '\r' << dots[i%256] << ' ' << std::setw(3) << (i + 1) * 100 / c << "%" << std::flush;
+			std::cout << '\r' << dots[i%256] << ' ' << std::setw(3) << (i + 1) * 100 / c << "% (" << i+1 << "/" << c << ")" << std::flush;
 		}
 		bg /= c;
 		bg.convertTo(bg, CV_8U);
@@ -244,6 +246,8 @@ int main(int argc, char* argv[]) {
 	}
 	const int gw = config["grid.width"].as<int>();
 	const int gh = config["grid.height"].as<int>();
+	const int winSize = config["window.size"].as<int>();
+	const int poly_n = config["poly.n"].as<int>();
 	Plot plot(gw, gh);
 	H5::DataSet velocity_dset;
 	H5::DataSet density_dset;
@@ -276,12 +280,12 @@ int main(int argc, char* argv[]) {
 	// Gunnar Farneback’s Optical Flow options
 	const double pyr_scale = 0.5;
 	const int levels = 2;
-	const int winSize = 45;
+	//const int winSize = 45;
 	const int iterations = 4;
-	const int poly_n = 7;
+	//const int poly_n = 7;
 	const double poly_sigma = 1.5;
 	int flags = cv::OPTFLOW_FARNEBACK_GAUSSIAN;
-	std::cout << "    0%" << std::flush;
+	std::cout << "    0% (1/" << count << ")" << std::flush;
 	for (int i = start, j = 0; i <= stop && cap.read(im); i += step, ++j) {
 		cv::cvtColor(im, gm, CV_RGB2GRAY); // convert to grayscale
 
@@ -333,7 +337,7 @@ int main(int argc, char* argv[]) {
 			density_dset.write(sd.ptr(), H5::PredType::NATIVE_UCHAR, mem_space, file_dspace);
 		}
 
-		std::cout << '\r' << dots[j%256] << ' ' << std::setw(3) << (j + 1) * 100 / count << "%" << std::flush;
+		std::cout << '\r' << dots[j%256] << ' ' << std::setw(3) << (j + 1) * 100 / count << "% (" << j+1 << "/" << count << ")" << std::flush;
 
 		// Skip frames instead of setting CV_CAP_PROP_POS_FRAMES to avoid issue with keyframes
 		for (int k = 1; k < step; ++k) cap.grab();
